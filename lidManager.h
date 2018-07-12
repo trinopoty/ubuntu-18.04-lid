@@ -10,6 +10,7 @@
 
 struct LidManager;
 struct Button;
+struct Power;
 
 typedef struct LidManager {
     struct udev* udev;
@@ -17,7 +18,10 @@ typedef struct LidManager {
     sd_bus* system_bus;
 
     struct Button* button;
+    struct Power* power;
 } LidManager;
+
+typedef void (*lidManager_handler)(const LidManager* lidManager);
 
 int lidManager_new(LidManager** pLidManager);
 void lidManager_close(LidManager* lidManager);

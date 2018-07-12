@@ -7,6 +7,8 @@
 
 #include <dirent.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <libudev.h>
 
 #define _cleanup_(x) __attribute__((cleanup(x)))
 
@@ -38,7 +40,7 @@ static struct udev_device *udev_device_unrefp(struct udev_device **udev_device) 
     return udev_device_unref(*udev_device);
 }
 
-static int freep(const void* *mem) {
+static void freep(void **mem) {
     free(*mem);
 }
 

@@ -19,18 +19,12 @@ FIND_LIBRARY(
         ${UDEV_PATH_LIB}
         )
 
-#find_package (PkgConfig REQUIRED)
-#pkg_check_modules (GIO REQUIRED gio-2.0)
-
 add_executable(systemd_lid
         main.c
         lidManager.c
-        button.c)
+        button.c
+        power.c)
 target_link_libraries(systemd_lid systemd)
 
 target_include_directories(systemd_lid PUBLIC ${UDEV_INCLUDE_DIR})
 target_link_libraries(systemd_lid ${UDEV_LIBRARIES})
-
-#target_include_directories(systemd_lid PUBLIC ${GIO_INCLUDE_DIRS})
-#link_directories(${GIO_LIBRARY_DIRS})
-#target_link_libraries(systemd_lid ${GIO_LIBRARIES})

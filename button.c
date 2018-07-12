@@ -13,117 +13,6 @@
 #include "lidManager.h"
 #include "button.h"
 
-static int on_ac_power() {
-    bool found_offline = false, found_online = false;
-    _cleanup_(closedirp) DIR *d = NULL;
-    struct dirent *de;
-
-    d = opendir("/sys/class/power_supply");
-    if (!d) {
-        return true;
-    }
-
-    int errno;
-    FOREACH_DIRENT(de, d, return true) {
-        _cleanup_(closep) int fd, device;
-        char contents[6];
-        ssize_t n;
-
-        device = openat(dirfd(d), de->d_name, O_DIRECTORY|O_RDONLY|O_CLOEXEC|O_NOCTTY);
-        if (device < 0) {
-            return -1;
-        }
-
-        fd = openat(device, "type", O_RDONLY|O_CLOEXEC|O_NOCTTY);
-        if (fd < 0) {
-            continue;
-        }
-
-        n = read(fd, contents, sizeof(contents));
-        if (n < 0) {
-            return -1;
-        }
-
-        if (n != 6 || memcmp(contents, "Mains\n", 6) != 0)
-            continue;
-
-        close(fd);
-
-        fd = openat(device, "online", O_RDONLY|O_CLOEXEC|O_NOCTTY);
-        if (fd < 0) {
-            return -1;
-        }
-
-        n = read(fd, contents, sizeof(contents));
-        if (n < 0) {
-            return -1;
-        }
-
-        if (n != 2 || contents[1] != '\n')
-            return -1;
-
-        if (contents[0] == '1') {
-            found_online = true;
-            break;
-        } else if (contents[0] == '0') {
-            found_offline = true;
-        } else {
-            return -1;
-        }
-    }
-
-    return (found_online || !found_offline)? 1 : 0;
-}
-
-static void handle_lid_closed(LidManager* lidManager) {
-    int on_ac = on_ac_power();
-    if (on_ac >= 0) {
-        if (on_ac == 0) {
-            // Lock and Suspend
-            sd_bus_error bus_error = {};
-            sd_bus_message* bus_reply = NULL;
-            if (sd_bus_call_method(lidManager->system_bus,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   "LockSessions",
-                                   &bus_error,
-                                   &bus_reply,
-                                   "",
-                                   0) < 0) {
-                // Do nothing
-            } else {
-                if (sd_bus_call_method(lidManager->system_bus,
-                                       "org.freedesktop.login1",
-                                       "/org/freedesktop/login1",
-                                       "org.freedesktop.login1.Manager",
-                                       "Suspend",
-                                       &bus_error,
-                                       &bus_reply,
-                                       "b",
-                                       0) < 0) {
-                    // Do nothing
-                }
-            }
-        } else {
-            // Lock
-            sd_bus_error bus_error = {};
-            sd_bus_message* bus_reply = NULL;
-            if (sd_bus_call_method(lidManager->system_bus,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   "LockSessions",
-                                   &bus_error,
-                                   &bus_reply,
-                                   "",
-                                   0) < 0) {
-                // Do nothing
-            }
-        }
-    }
-}
-
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 static int button_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
@@ -141,15 +30,14 @@ static int button_handler(sd_event_source *s, int fd, uint32_t revents, void *us
         return 0;
     }
 
-    if (ev.type == EV_SW && ev.value > 0) {
-        if (ev.code == SW_LID) {
+    if (ev.type == EV_SW && ev.code == SW_LID) {
+        if (ev.value > 0) {
             button->lid_closed = true;
-            handle_lid_closed(button->manager);
-        }
-    } else if (ev.type == EV_SW && ev.value == 0) {
-        if (ev.code == SW_LID) {
+        } else {
             button->lid_closed = false;
         }
+
+        button->handler(button->manager);
     }
 
     return 0;
@@ -210,13 +98,16 @@ int button_set_mask(Button* button) {
     return 0;
 }
 
-Button* button_new(LidManager* manager, const char* name) {
+Button* button_new(LidManager* manager, const char* name, lidManager_handler handler) {
     Button* button = malloc(sizeof(Button));
     memset(button, 0, sizeof(Button));
 
     button->manager = manager;
     button->name = strdup(name);
+    button->handler = handler;
+
     button->fd = -1;
+    button->lid_closed = false;
 
     return button;
 }
@@ -267,9 +158,9 @@ void button_close(Button* button) {
     free(button);
 }
 
-int button_create(LidManager* manager, const char* name, Button **pButton) {
+int button_create(LidManager* lidManager, Button **pButton, const char* name, lidManager_handler handler) {
     int r;
-    Button* button = button_new(manager, name);
+    Button* button = button_new(lidManager, name, handler);
     if (!button) {
         return -ENOMEM;
     }
