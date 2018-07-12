@@ -25,7 +25,7 @@ static int sig_int_handler(sd_event_source *s, const struct signalfd_siginfo *si
 }
 
 static void lidManager_handler_impl(const LidManager* lidManager) {
-    bool ac_connected = (lidManager->power && lidManager->power->ac_connected);
+    bool ac_connected = ((lidManager->power == NULL) || lidManager->power->ac_connected);
     bool lid_closed = (lidManager->button && lidManager->button->lid_closed);
 
     if (lid_closed) {
