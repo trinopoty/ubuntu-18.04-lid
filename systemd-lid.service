@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=/tmp
-ExecStart=/usr/bin/systemd_lid
+ExecStart=/usr/bin/systemd-lid
 
 [Install]
 WantedBy=multi-user.target

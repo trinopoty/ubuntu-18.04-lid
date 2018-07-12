@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(systemd_lid C)
+project(systemd-lid C)
 
 set(CMAKE_C_STANDARD 99)
 
@@ -19,12 +19,12 @@ FIND_LIBRARY(
         ${UDEV_PATH_LIB}
         )
 
-add_executable(systemd_lid
+add_executable(systemd-lid
         main.c
         lidManager.c
         button.c
         power.c)
-target_link_libraries(systemd_lid systemd)
+target_link_libraries(systemd-lid systemd)
 
-target_include_directories(systemd_lid PUBLIC ${UDEV_INCLUDE_DIR})
-target_link_libraries(systemd_lid ${UDEV_LIBRARIES})
+target_include_directories(systemd-lid PUBLIC ${UDEV_INCLUDE_DIR})
+target_link_libraries(systemd-lid ${UDEV_LIBRARIES})
