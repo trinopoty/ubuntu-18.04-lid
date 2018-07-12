@@ -22,7 +22,10 @@ FIND_LIBRARY(
 #find_package (PkgConfig REQUIRED)
 #pkg_check_modules (GIO REQUIRED gio-2.0)
 
-add_executable(systemd_lid main.c)
+add_executable(systemd_lid
+        main.c
+        lidManager.c
+        button.c)
 target_link_libraries(systemd_lid systemd)
 
 target_include_directories(systemd_lid PUBLIC ${UDEV_INCLUDE_DIR})
