@@ -181,7 +181,7 @@ int main() {
         goto exit;
     }
 
-    if (find_lid(lidManager) >= 0) {
+    if (find_lid(lidManager) > 0) {
         find_ac_adapter(lidManager);
     }
 

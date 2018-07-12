@@ -34,14 +34,14 @@ static int detect_ac_connected(Power* power) {
         return -1;
     }
 
-    if (contents[0] == '1') {
-        return 1;
-    } else {
-        return 0;
-    }
+    return (contents[0] == '1')? 1 : 0;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 static int ac_adapter_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
+#pragma clang diagnostic pop
+
     Power* power = (Power*) userdata;
 
     struct udev_device* device = udev_monitor_receive_device(power->udev_monitor);
@@ -67,6 +67,8 @@ Power* power_new(struct LidManager* lidManager, const char* devName, const char*
     power->io_event_source = NULL;
     power->udev_fd = -1;
     power->ac_connected = false;
+
+    return power;
 }
 
 int power_open(Power* power) {
