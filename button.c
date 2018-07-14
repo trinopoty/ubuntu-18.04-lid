@@ -122,7 +122,7 @@ int button_open(Button* button) {
 
     button->fd = open(deviceFile, O_RDWR|O_CLOEXEC|O_NOCTTY|O_NONBLOCK);
     if (button->fd < 0) {
-        fprintf(stderr, "Unable to open device: %s", deviceFile);
+        fprintf(stderr, "Unable to open device: %s\n", deviceFile);
         return -1;
     }
 

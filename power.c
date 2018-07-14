@@ -19,6 +19,7 @@ static int detect_ac_connected(Power* power) {
 
     _cleanup_(closep) int fd = openat(dirfd(sysDir), "online", O_RDONLY|O_CLOEXEC|O_NOCTTY);
     if (!fd) {
+        fprintf(stderr, "Unable to open: %s/%s\n", power->sysPath, "online");
         return -ENOENT;
     }
 
