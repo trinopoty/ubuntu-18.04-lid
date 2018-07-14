@@ -1,8 +1,8 @@
 #include <malloc.h>
 #include <memory.h>
 #include <libudev.h>
-#include <asm/errno.h>
 #include <stdbool.h>
+#include <asm/errno.h>
 
 #include "basic.h"
 #include "lidManager.h"
@@ -19,6 +19,9 @@ int lidManager_new(LidManager** pLidManager) {
     }
 
     lidManager->udev = udev_new();
+    if (!lidManager->udev) {
+        return -ENOMEM;
+    }
 
     r = sd_event_new(&lidManager->event);
     if (r < 0) {

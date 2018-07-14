@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <libudev.h>
 #include <asm/errno.h>
+#include <dconf/dconf.h>
 #include <linux/input.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -15,6 +16,8 @@
 #include "button.h"
 #include "power.h"
 
+typedef void (*handler_func)(const LidManager* lidManager);
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 static int sig_int_handler(sd_event_source *s, const struct signalfd_siginfo *si, void *userdata) {
@@ -24,50 +27,152 @@ static int sig_int_handler(sd_event_source *s, const struct signalfd_siginfo *si
     sd_event_exit(lidManager->event, 0);
 }
 
+static void handler_nothing(const LidManager* lidManager) {
+}
+
+/**
+ * Lock
+ *
+ * @param lidManager
+ */
+static void handler_lock(const LidManager* lidManager) {
+    sd_bus_error bus_error = {};
+    sd_bus_message *bus_reply = NULL;
+
+    sd_bus_call_method(lidManager->system_bus,
+                       "org.freedesktop.login1",
+                       "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager",
+                       "LockSessions",
+                       &bus_error,
+                       &bus_reply,
+                       "");
+}
+
+/**
+ * Lock and suspend.
+ *
+ * @param lidManager
+ */
+static void handler_suspend(const LidManager* lidManager) {
+    sd_bus_error bus_error = {};
+    sd_bus_message *bus_reply = NULL;
+
+    sd_bus_call_method(lidManager->system_bus,
+                       "org.freedesktop.login1",
+                       "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager",
+                       "LockSessions",
+                       &bus_error,
+                       &bus_reply,
+                       "");
+
+    sd_bus_call_method(lidManager->system_bus,
+                       "org.freedesktop.login1",
+                       "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager",
+                       "Suspend",
+                       &bus_error,
+                       &bus_reply,
+                       "b",
+                       0);
+}
+
+/**
+ * Shutdown
+ *
+ * @param lidManager
+ */
+static void handler_shutdown(const LidManager* lidManager) {
+    sd_bus_error bus_error = {};
+    sd_bus_message *bus_reply = NULL;
+
+    sd_bus_call_method(lidManager->system_bus,
+                       "org.freedesktop.login1",
+                       "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager",
+                       "PowerOff",
+                       &bus_error,
+                       &bus_reply,
+                       "b",
+                       0);
+}
+
+/**
+ * Hibernate
+ *
+ * @param lidManager
+ */
+static void handler_hibernate(const LidManager* lidManager) {
+    sd_bus_error bus_error = {};
+    sd_bus_message *bus_reply = NULL;
+
+    sd_bus_call_method(lidManager->system_bus,
+                       "org.freedesktop.login1",
+                       "/org/freedesktop/login1",
+                       "org.freedesktop.login1.Manager",
+                       "Hibernate",
+                       &bus_error,
+                       &bus_reply,
+                       "b",
+                       0);
+}
+
+/**
+ * Logout
+ *
+ * @param lidManager
+ */
+static void handler_logout(const LidManager* lidManager) {
+}
+
 static void lidManager_handler_impl(const LidManager* lidManager) {
     bool ac_connected = ((lidManager->power == NULL) || lidManager->power->ac_connected);
     bool lid_closed = (lidManager->button && lidManager->button->lid_closed);
 
     if (lid_closed) {
+        char* dconf_key = NULL;
         if (ac_connected) {
-            // Lock
-            sd_bus_error bus_error = {};
-            sd_bus_message *bus_reply = NULL;
-            sd_bus_call_method(lidManager->system_bus,
-                               "org.freedesktop.login1",
-                               "/org/freedesktop/login1",
-                               "org.freedesktop.login1.Manager",
-                               "LockSessions",
-                               &bus_error,
-                               &bus_reply,
-                               "",
-                               0);
+            dconf_key = "/org/gnome/settings-daemon/plugins/power/lid-close-ac-action";
         } else {
-            // Lock and Suspend
-            sd_bus_error bus_error = {};
-            sd_bus_message *bus_reply = NULL;
-            if (sd_bus_call_method(lidManager->system_bus,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   "LockSessions",
-                                   &bus_error,
-                                   &bus_reply,
-                                   "",
-                                   0) < 0) {
-                // Do nothing
-            } else {
-                sd_bus_call_method(lidManager->system_bus,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   "Suspend",
-                                   &bus_error,
-                                   &bus_reply,
-                                   "b",
-                                   0);
-            }
+            dconf_key = "/org/gnome/settings-daemon/plugins/power/lid-close-battery-action";
         }
+
+        DConfClient* dconf_client = dconf_client_new();
+        GVariant* dconf_value = dconf_client_read(dconf_client, dconf_key);
+        if (!dconf_value) {
+            return;
+        }
+
+        gsize size;
+        const gchar* value = g_variant_get_string(dconf_value, &size);
+        if (!value) {
+            return;
+        }
+
+        handler_func handler = NULL;
+
+        if (strcmp(value, "nothing") == 0) {
+            handler = handler_nothing;
+        } else if (strcmp(value, "blank") == 0) {
+            // Blank is treated as lock because there is no "lock"
+            handler = handler_lock;
+        } else if (strcmp(value, "suspend") == 0) {
+            handler = handler_suspend;
+        } else if (strcmp(value, "shutdown") == 0) {
+            handler = handler_shutdown;
+        } else if (strcmp(value, "hibernate") == 0) {
+            handler = handler_hibernate;
+        } else if (strcmp(value, "logout") == 0) {
+            handler = handler_logout;
+        } else {
+            handler = handler_nothing;
+        }
+
+        g_variant_unref(dconf_value);
+        g_object_unref(dconf_client);
+
+        handler(lidManager);
     }
 }
 

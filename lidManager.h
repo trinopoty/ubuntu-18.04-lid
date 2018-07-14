@@ -5,6 +5,7 @@
 #ifndef SYSTEMD_LID_LID_H
 #define SYSTEMD_LID_LID_H
 
+#include <libudev.h>
 #include <systemd/sd-bus.h>
 #include <systemd/sd-event.h>
 
