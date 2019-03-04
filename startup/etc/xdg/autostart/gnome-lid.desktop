@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=GNOME Ubuntu 18.04 Lid Handler
+Type=Application
+Exec=/usr/bin/gnome3-lid
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-Phase=Application
+X-GNOME-Autostart-Notify=true
+X-GNOME-AutoRestart=true
+
