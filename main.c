@@ -103,10 +103,8 @@ static void handler_lock(const LidManager* lidManager) {
  * @param lidManager
  */
 static void handler_suspend(const LidManager* lidManager) {
-    handler_lock(lidManager);
-
     GDBusConnection *connection = lidManager->connection;
-    GError *error;
+    GError *error = NULL;
 
     GVariant *parameters = g_variant_new("(b)", FALSE);
     GVariant *result = g_dbus_connection_call_sync(
@@ -133,7 +131,7 @@ static void handler_suspend(const LidManager* lidManager) {
  */
 static void handler_shutdown(const LidManager* lidManager) {
     GDBusConnection *connection = lidManager->connection;
-    GError *error;
+    GError *error = NULL;
 
     GVariant *parameters = g_variant_new("(b)", FALSE);
     GVariant *result = g_dbus_connection_call_sync(
@@ -162,7 +160,7 @@ static void handler_hibernate(const LidManager* lidManager) {
     handler_lock(lidManager);
 
     GDBusConnection *connection = lidManager->connection;
-    GError *error;
+    GError *error = NULL;
 
     GVariant *parameters = g_variant_new("(b)", FALSE);
     GVariant *result = g_dbus_connection_call_sync(
