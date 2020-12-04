@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <libudev.h>
+#include <stdint.h>
 
 #define _cleanup_(x) __attribute__((cleanup(x)))
 

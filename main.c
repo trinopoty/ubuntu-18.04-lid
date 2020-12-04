@@ -9,7 +9,6 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/unistd.h>
-#include <systemd/sd-event.h>
 #include <gio/gio.h>
 #include <glib-unix.h>
 

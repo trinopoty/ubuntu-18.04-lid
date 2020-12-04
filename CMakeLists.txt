@@ -12,7 +12,7 @@ add_executable(gnome3-lid
         lidManager.c
         button.c
         power.c)
-target_link_libraries(gnome3-lid systemd)
+target_link_libraries(gnome3-lid)
 
 target_include_directories(gnome3-lid PUBLIC ${UDEV_INCLUDE_DIRS})
 link_directories(${UDEV_LIBRARY_DIRS})

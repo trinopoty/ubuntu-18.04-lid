@@ -7,7 +7,6 @@
 #include <linux/input.h>
 #include <linux/input-event-codes.h>
 #include <sys/ioctl.h>
-#include <systemd/sd-bus.h>
 #include <glib-unix.h>
 
 #include "basic.h"
