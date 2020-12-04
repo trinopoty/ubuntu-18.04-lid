@@ -8,8 +8,10 @@
 #include <linux/input.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/unistd.h>
 #include <systemd/sd-event.h>
-#include <systemd/sd-bus.h>
+#include <gio/gio.h>
+#include <glib-unix.h>
 
 #include "basic.h"
 #include "lidManager.h"
@@ -18,13 +20,11 @@
 
 typedef void (*handler_func)(const LidManager* lidManager);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-parameter"
-static int sig_int_handler(sd_event_source *s, const struct signalfd_siginfo *si, void *userdata) {
-#pragma clang diagnostic pop
+static gboolean sig_int_handler(gpointer user_data) {
+    LidManager* lidManager = (LidManager*) user_data;
+    g_main_loop_quit(lidManager->loop);
 
-    LidManager* lidManager = (LidManager*) userdata;
-    sd_event_exit(lidManager->event, 0);
+    return G_SOURCE_CONTINUE;
 }
 
 static void handler_nothing(const LidManager* lidManager) {
@@ -36,17 +36,66 @@ static void handler_nothing(const LidManager* lidManager) {
  * @param lidManager
  */
 static void handler_lock(const LidManager* lidManager) {
-    sd_bus_error bus_error = {};
-    sd_bus_message *bus_reply = NULL;
+    GDBusConnection *connection = lidManager->connection;
+    GError *error = NULL;
 
-    sd_bus_call_method(lidManager->system_bus,
-                       "org.freedesktop.login1",
-                       "/org/freedesktop/login1",
-                       "org.freedesktop.login1.Manager",
-                       "LockSessions",
-                       &bus_error,
-                       &bus_reply,
-                       "");
+    GVariant *parameters = g_variant_new("()");
+    GVariant *result = g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+            "ListSessions",
+            parameters,
+            NULL,
+            G_DBUS_CALL_FLAGS_NONE,
+            10 * 1000,
+            NULL,
+            &error);
+    if (!error) {
+        GVariant *array = g_variant_get_child_value(result, 0);
+        GVariantIter *arrayIter = g_variant_iter_new(array);
+        char *session_name;
+        guint32 session_uid;
+        char *session_user;
+        char *session_seat;
+        char *session_path;
+        int found_session = 0;
+
+        __uid_t uid = getuid();
+
+        while (g_variant_iter_loop(arrayIter, "(susso)", &session_name, &session_uid, &session_user, &session_seat,
+                                   &session_path)) {
+            if (uid == session_uid) {
+                // Found our session
+                found_session = 1;
+                break;
+            }
+        }
+
+        if (found_session) {
+            parameters = g_variant_new("(s)", session_name);
+            GVariant *result2 = g_dbus_connection_call_sync(
+                    connection,
+                    "org.freedesktop.login1",
+                    "/org/freedesktop/login1",
+                    "org.freedesktop.login1.Manager",
+                    "LockSession",
+                    parameters,
+                    NULL,
+                    G_DBUS_CALL_FLAGS_NONE,
+                    10 * 1000,
+                    NULL,
+                    &error);
+            if (result2) {
+                g_variant_unref(result2);
+            }
+        }
+
+        g_variant_iter_free(arrayIter);
+        g_variant_unref(array);
+        g_variant_unref(result);
+    }
 }
 
 /**
@@ -55,27 +104,27 @@ static void handler_lock(const LidManager* lidManager) {
  * @param lidManager
  */
 static void handler_suspend(const LidManager* lidManager) {
-    sd_bus_error bus_error = {};
-    sd_bus_message *bus_reply = NULL;
+    handler_lock(lidManager);
 
-    sd_bus_call_method(lidManager->system_bus,
-                       "org.freedesktop.login1",
-                       "/org/freedesktop/login1",
-                       "org.freedesktop.login1.Manager",
-                       "LockSessions",
-                       &bus_error,
-                       &bus_reply,
-                       "");
+    GDBusConnection *connection = lidManager->connection;
+    GError *error;
 
-    sd_bus_call_method(lidManager->system_bus,
-                       "org.freedesktop.login1",
-                       "/org/freedesktop/login1",
-                       "org.freedesktop.login1.Manager",
-                       "Suspend",
-                       &bus_error,
-                       &bus_reply,
-                       "b",
-                       0);
+    GVariant *parameters = g_variant_new("(b)", FALSE);
+    GVariant *result = g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+            "Suspend",
+            parameters,
+            NULL,
+            G_DBUS_CALL_FLAGS_NONE,
+            10 * 1000,
+            NULL,
+            &error);
+    if (result) {
+        g_variant_unref(result);
+    }
 }
 
 /**
@@ -84,18 +133,25 @@ static void handler_suspend(const LidManager* lidManager) {
  * @param lidManager
  */
 static void handler_shutdown(const LidManager* lidManager) {
-    sd_bus_error bus_error = {};
-    sd_bus_message *bus_reply = NULL;
+    GDBusConnection *connection = lidManager->connection;
+    GError *error;
 
-    sd_bus_call_method(lidManager->system_bus,
-                       "org.freedesktop.login1",
-                       "/org/freedesktop/login1",
-                       "org.freedesktop.login1.Manager",
-                       "PowerOff",
-                       &bus_error,
-                       &bus_reply,
-                       "b",
-                       0);
+    GVariant *parameters = g_variant_new("(b)", FALSE);
+    GVariant *result = g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+            "PowerOff",
+            parameters,
+            NULL,
+            G_DBUS_CALL_FLAGS_NONE,
+            10 * 1000,
+            NULL,
+            &error);
+    if (result) {
+        g_variant_unref(result);
+    }
 }
 
 /**
@@ -104,18 +160,27 @@ static void handler_shutdown(const LidManager* lidManager) {
  * @param lidManager
  */
 static void handler_hibernate(const LidManager* lidManager) {
-    sd_bus_error bus_error = {};
-    sd_bus_message *bus_reply = NULL;
+    handler_lock(lidManager);
 
-    sd_bus_call_method(lidManager->system_bus,
-                       "org.freedesktop.login1",
-                       "/org/freedesktop/login1",
-                       "org.freedesktop.login1.Manager",
-                       "Hibernate",
-                       &bus_error,
-                       &bus_reply,
-                       "b",
-                       0);
+    GDBusConnection *connection = lidManager->connection;
+    GError *error;
+
+    GVariant *parameters = g_variant_new("(b)", FALSE);
+    GVariant *result = g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+            "Hibernate",
+            parameters,
+            NULL,
+            G_DBUS_CALL_FLAGS_NONE,
+            10 * 1000,
+            NULL,
+            &error);
+    if (result) {
+        g_variant_unref(result);
+    }
 }
 
 /**
@@ -152,9 +217,7 @@ static void lidManager_handler_impl(const LidManager* lidManager) {
 
         handler_func handler = NULL;
 
-        if (strcmp(value, "nothing") == 0) {
-            handler = handler_nothing;
-        } else if (strcmp(value, "blank") == 0) {
+        if (strcmp(value, "blank") == 0) {
             // Blank is treated as lock because there is no "lock"
             handler = handler_lock;
         } else if (strcmp(value, "suspend") == 0) {
@@ -250,10 +313,10 @@ int find_ac_adapter(LidManager* lidManager) {
                 return -EIO;
             }
 
+            close(fd);
+
             if (n != 6 || memcmp(contents, "Mains\n", 6) != 0)
                 continue;
-
-            close(fd);
 
             fd = openat(device, "online", O_RDONLY|O_CLOEXEC|O_NOCTTY);
             if (fd < 0) {
@@ -280,6 +343,41 @@ int find_ac_adapter(LidManager* lidManager) {
     return errno;
 }
 
+void on_connected(GDBusConnection *connection,
+                  const gchar     *name,
+                  const gchar     *name_owner,
+                  gpointer         user_data) {
+    LidManager *lidManager = (LidManager*) user_data;
+    lidManager->connection = connection;
+
+    GError *error = NULL;
+
+    GVariant *parameters = g_variant_new("(ssss)", "handle-lid-switch", "ubuntu-lid-fixer", "user preference", "block");
+    g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+            "Inhibit",
+            parameters,
+            NULL,
+            G_DBUS_CALL_FLAGS_NONE,
+            10 * 1000,
+            NULL,
+            &error);
+    if (error) {
+        g_dbus_connection_close_sync(connection, NULL, &error);
+    }
+}
+
+void on_disconnected(GDBusConnection *connection,
+                     const gchar     *name,
+                     gpointer         user_data) {
+    LidManager *lidManager = (LidManager*) user_data;
+    lidManager->connection = NULL;
+    g_main_loop_quit(lidManager->loop);
+}
+
 int main() {
     LidManager* lidManager = NULL;
     if (lidManager_new(&lidManager) < 0) {
@@ -290,37 +388,22 @@ int main() {
         find_ac_adapter(lidManager);
     }
 
-    sd_bus_error bus_error = {};
-    sd_bus_message* bus_reply = NULL;
-    if (sd_bus_call_method(lidManager->system_bus,
-                           "org.freedesktop.login1",
-                           "/org/freedesktop/login1",
-                           "org.freedesktop.login1.Manager",
-                           "Inhibit",
-                           &bus_error,
-                           &bus_reply,
-                           "ssss",
-                           "handle-lid-switch", "ubuntu-lid-fixer", "user preference", "block") < 0) {
-        goto exit;
-    }
+    GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+    lidManager->loop = loop;
 
-    sigset_t ss;
-    sigemptyset(&ss);
-    sigaddset(&ss, SIGINT);
-    sigaddset(&ss, SIGTERM);
+    g_unix_signal_add(SIGINT, sig_int_handler, lidManager);
+    g_unix_signal_add(SIGTERM, sig_int_handler, lidManager);
 
-    if (sigprocmask(SIG_BLOCK, &ss, NULL) < 0) {
-        goto exit;
-    }
-
-    if (sd_event_add_signal(lidManager->event, NULL, SIGINT, sig_int_handler, lidManager) < 0) {
-        goto exit;
-    }
-    if (sd_event_add_signal(lidManager->event, NULL, SIGTERM, sig_int_handler, lidManager) < 0) {
-        goto exit;
-    }
-
-    sd_event_loop(lidManager->event);
+    guint watcher_id = g_bus_watch_name(
+            G_BUS_TYPE_SYSTEM,
+            "org.freedesktop.login1",
+            G_BUS_NAME_WATCHER_FLAGS_NONE,
+            on_connected,
+            on_disconnected,
+            lidManager,
+            NULL);
+    g_main_loop_run(loop);
+    g_bus_unwatch_name(watcher_id);
 
     exit:
     if (lidManager) {

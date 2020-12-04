@@ -4,6 +4,7 @@
 #include <libudev.h>
 #include <asm/errno.h>
 #include <linux/input.h>
+#include <glib-unix.h>
 
 #include "basic.h"
 #include "lidManager.h"
@@ -40,10 +41,10 @@ static int detect_ac_connected(Power* power) {
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
-static int ac_adapter_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
+static gboolean ac_adapter_handler(gint fd, GIOCondition condition, void *user_data) {
 #pragma clang diagnostic pop
 
-    Power* power = (Power*) userdata;
+    Power* power = (Power*) user_data;
 
     struct udev_device* device = udev_monitor_receive_device(power->udev_monitor);
     if (device) {
@@ -54,6 +55,8 @@ static int ac_adapter_handler(sd_event_source *s, int fd, uint32_t revents, void
         }
         udev_device_unref(device);
     }
+
+    return TRUE;
 }
 
 Power* power_new(struct LidManager* lidManager, const char* devName, const char* sysPath, lidManager_handler handler) {
@@ -65,8 +68,9 @@ Power* power_new(struct LidManager* lidManager, const char* devName, const char*
     power->sysPath = strdup(sysPath);
     power->handler = handler;
 
-    power->io_event_source = NULL;
     power->udev_fd = -1;
+    power->udev_monitor = NULL;
+    power->event_monitor = 0;
     power->ac_connected = false;
 
     return power;
@@ -103,19 +107,15 @@ int power_open(Power* power) {
         return r;
     }
 
-    r = sd_event_add_io(power->manager->event, &power->io_event_source, fd_udev, EPOLLIN, ac_adapter_handler, power);
-    if (r < 0) {
-        return r;
-    }
-
     power->udev_monitor = udev_monitor;
+    power->event_monitor = g_unix_fd_add(fd_udev, G_IO_IN, ac_adapter_handler, power);
 
     return 0;
 }
 
 void power_close(Power* power) {
-    if (power->io_event_source) {
-        sd_event_source_unref(power->io_event_source);
+    if (power->event_monitor) {
+        g_source_remove(power->event_monitor);
     }
     if (power->udev_fd > 0) {
         close(power->udev_fd);

@@ -2,7 +2,7 @@
 #define SYSTEMD_LID_BUTTON_H
 
 #include <stdbool.h>
-#include <systemd/sd-event.h>
+#include <gio/gio.h>
 
 #include "lidManager.h"
 
@@ -14,8 +14,7 @@ typedef struct Button {
     lidManager_handler handler;
 
     int fd;
-
-    sd_event_source* io_event_source;
+    guint event_monitor;
 
     bool lid_closed;
 } Button;

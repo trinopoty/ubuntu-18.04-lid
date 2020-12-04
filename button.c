@@ -8,6 +8,7 @@
 #include <linux/input-event-codes.h>
 #include <sys/ioctl.h>
 #include <systemd/sd-bus.h>
+#include <glib-unix.h>
 
 #include "basic.h"
 #include "lidManager.h"
@@ -15,10 +16,10 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
-static int button_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
+static gboolean button_handler(gint fd, GIOCondition condition, void *user_data) {
 #pragma clang diagnostic pop
 
-    Button* button = (Button*) userdata;
+    Button* button = (Button*) user_data;
     struct input_event ev;
     ssize_t l;
 
@@ -40,7 +41,7 @@ static int button_handler(sd_event_source *s, int fd, uint32_t revents, void *us
         button->handler(button->manager);
     }
 
-    return 0;
+    return TRUE;
 }
 
 bool button_is_lid(Button* button) {
@@ -136,10 +137,7 @@ int button_open(Button* button) {
     }
 
     button_set_mask(button);
-
-    if (sd_event_add_io(button->manager->event, &button->io_event_source, button->fd, EPOLLIN, button_handler, button) < 0) {
-        goto fail;
-    }
+    button->event_monitor = g_unix_fd_add(button->fd, G_IO_IN, button_handler, button);
 
     return 0;
 
@@ -148,8 +146,11 @@ int button_open(Button* button) {
 }
 
 void button_close(Button* button) {
-    if (button->io_event_source) {
+    /*if (button->io_event_source) {
         sd_event_source_unref(button->io_event_source);
+    }*/
+    if (button->event_monitor) {
+        g_source_remove(button->event_monitor);
     }
     if (button->fd) {
         close(button->fd);

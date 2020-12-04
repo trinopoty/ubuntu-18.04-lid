@@ -2,7 +2,6 @@
 #define SYSTEMD_LID_POWER_H
 
 #include <stdbool.h>
-#include <systemd/sd-event.h>
 
 #include "lidManager.h"
 
@@ -14,10 +13,9 @@ typedef struct Power {
     const char* sysPath;
     lidManager_handler handler;
 
-    sd_event_source* io_event_source;
-
     int udev_fd;
     struct udev_monitor* udev_monitor;
+    guint event_monitor;
 
     bool ac_connected;
 } Power;

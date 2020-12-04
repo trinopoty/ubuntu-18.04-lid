@@ -6,8 +6,7 @@
 #define SYSTEMD_LID_LID_H
 
 #include <libudev.h>
-#include <systemd/sd-bus.h>
-#include <systemd/sd-event.h>
+#include <gio/gio.h>
 
 struct LidManager;
 struct Button;
@@ -15,8 +14,9 @@ struct Power;
 
 typedef struct LidManager {
     struct udev* udev;
-    sd_event *event;
-    sd_bus* system_bus;
+
+    GMainLoop *loop;
+    GDBusConnection *connection;
 
     struct Button* button;
     struct Power* power;
